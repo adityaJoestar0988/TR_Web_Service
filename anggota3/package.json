@@ -1,0 +1,13 @@
+{
+  "name": "anggota3-producer",
+  "version": "1.0.0",
+  "description": "Producer untuk mengirim pesan ke RabbitMQ",
+  "main": "producer.js",
+  "scripts": {
+    "start": "node producer.js"
+  },
+  "dependencies": {
+    "amqplib": "^2.0.1",
+    "dotenv": "^17.4.2"
+  }
+}
