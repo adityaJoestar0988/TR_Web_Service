@@ -1,0 +1,13 @@
+{
+  "name": "anggota4-consumer",
+  "version": "1.0.0",
+  "description": "Consumer untuk menerima pesan dari RabbitMQ",
+  "main": "consumer.js",
+  "scripts": {
+    "start": "node consumer.js"
+  },
+  "dependencies": {
+    "amqplib": "^2.0.1",
+    "dotenv": "^17.4.2"
+  }
+}
