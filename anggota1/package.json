@@ -1,0 +1,16 @@
+{
+  "name": "anggota1-dashboard",
+  "version": "1.0.0",
+  "description": "RabbitMQ Order Dashboard - Antarmuka monitoring dan pengiriman order",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "amqplib": "^2.0.1",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "ws": "^8.18.3"
+  }
+}

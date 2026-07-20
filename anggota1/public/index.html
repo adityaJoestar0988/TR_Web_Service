@@ -1,0 +1,996 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RabbitMQ Order Dashboard</title>
+  <meta name="description" content="Dashboard monitoring dan pengiriman order berbasis RabbitMQ dengan visualisasi real-time" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg-primary: #0a0a0f;
+      --bg-secondary: #111118;
+      --bg-card: #16161f;
+      --bg-card-hover: #1e1e2a;
+      --border: rgba(255,255,255,0.07);
+      --border-active: rgba(139,92,246,0.5);
+      --purple: #8b5cf6;
+      --purple-light: #a78bfa;
+      --purple-dark: #6d28d9;
+      --cyan: #06b6d4;
+      --cyan-light: #22d3ee;
+      --green: #10b981;
+      --green-light: #34d399;
+      --red: #ef4444;
+      --orange: #f59e0b;
+      --text-primary: #f1f5f9;
+      --text-secondary: #94a3b8;
+      --text-muted: #475569;
+      --glow-purple: 0 0 30px rgba(139,92,246,0.3);
+      --glow-cyan: 0 0 30px rgba(6,182,212,0.3);
+      --glow-green: 0 0 30px rgba(16,185,129,0.25);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Background grid pattern */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(139,92,246,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(139,92,246,0.03) 1px, transparent 1px);
+      background-size: 60px 60px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* Ambient glow blobs */
+    .blob {
+      position: fixed;
+      border-radius: 50%;
+      filter: blur(100px);
+      pointer-events: none;
+      z-index: 0;
+      animation: blobFloat 8s ease-in-out infinite;
+    }
+    .blob-1 { width: 500px; height: 500px; top: -200px; left: -100px; background: rgba(139,92,246,0.12); }
+    .blob-2 { width: 400px; height: 400px; bottom: -100px; right: -100px; background: rgba(6,182,212,0.1); animation-delay: -4s; }
+    .blob-3 { width: 300px; height: 300px; top: 50%; left: 50%; background: rgba(16,185,129,0.05); animation-delay: -2s; }
+
+    @keyframes blobFloat {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      33% { transform: translate(20px, -15px) scale(1.05); }
+      66% { transform: translate(-10px, 10px) scale(0.95); }
+    }
+
+    .container {
+      position: relative;
+      z-index: 1;
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    /* ===== HEADER ===== */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 32px;
+      padding: 20px 28px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      backdrop-filter: blur(20px);
+    }
+
+    .header-brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .brand-icon {
+      width: 44px;
+      height: 44px;
+      background: linear-gradient(135deg, var(--purple), var(--cyan));
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      box-shadow: var(--glow-purple);
+    }
+
+    .brand-text h1 {
+      font-size: 20px;
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--purple-light), var(--cyan-light));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .brand-text p {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .header-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.03);
+      font-size: 13px;
+      font-weight: 500;
+      transition: all 0.3s ease;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--red);
+      transition: background 0.3s;
+    }
+
+    .status-dot.connected {
+      background: var(--green);
+      box-shadow: 0 0 8px var(--green);
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    /* ===== STATS GRID ===== */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .stat-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 20px 24px;
+      transition: all 0.3s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .stat-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: var(--accent, var(--purple));
+      opacity: 0.7;
+    }
+
+    .stat-card:hover {
+      border-color: var(--border-active);
+      transform: translateY(-2px);
+      box-shadow: var(--glow-purple);
+    }
+
+    .stat-label {
+      font-size: 12px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      font-weight: 600;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .stat-value {
+      font-size: 36px;
+      font-weight: 800;
+      font-family: 'JetBrains Mono', monospace;
+      line-height: 1;
+    }
+
+    .stat-card.sent { --accent: var(--purple); }
+    .stat-card.received { --accent: var(--green); }
+    .stat-card.queue { --accent: var(--cyan); }
+    .stat-card.failed { --accent: var(--red); }
+
+    .stat-card.sent .stat-value { color: var(--purple-light); }
+    .stat-card.received .stat-value { color: var(--green-light); }
+    .stat-card.queue .stat-value { color: var(--cyan-light); }
+    .stat-card.failed .stat-value { color: var(--red); }
+
+    /* ===== FLOW VISUALIZATION ===== */
+    .flow-section {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+
+    .section-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .flow-diagram {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0;
+      padding: 20px 0;
+    }
+
+    .flow-node {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      flex: 1;
+      max-width: 160px;
+    }
+
+    .flow-node-icon {
+      width: 64px;
+      height: 64px;
+      border-radius: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 28px;
+      border: 2px solid var(--border);
+      background: var(--bg-secondary);
+      transition: all 0.3s ease;
+      position: relative;
+    }
+
+    .flow-node-icon.active {
+      border-color: var(--node-color, var(--purple));
+      box-shadow: 0 0 20px var(--node-glow, rgba(139,92,246,0.3));
+      animation: nodeGlow 1s ease-in-out;
+    }
+
+    @keyframes nodeGlow {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.1); }
+      100% { transform: scale(1); }
+    }
+
+    .flow-node.producer .flow-node-icon { --node-color: var(--purple); --node-glow: rgba(139,92,246,0.4); }
+    .flow-node.exchange .flow-node-icon { --node-color: var(--orange); --node-glow: rgba(245,158,11,0.4); }
+    .flow-node.queue .flow-node-icon { --node-color: var(--cyan); --node-glow: rgba(6,182,212,0.4); }
+    .flow-node.consumer .flow-node-icon { --node-color: var(--green); --node-glow: rgba(16,185,129,0.4); }
+
+    .flow-node-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      text-align: center;
+    }
+
+    .flow-node-sublabel {
+      font-size: 10px;
+      color: var(--text-muted);
+      text-align: center;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .flow-arrow {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      padding: 0 8px;
+    }
+
+    .flow-arrow-line {
+      height: 2px;
+      width: 100%;
+      background: linear-gradient(90deg, var(--from, var(--purple)), var(--to, var(--cyan)));
+      border-radius: 2px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .flow-arrow-line::after {
+      content: '';
+      position: absolute;
+      top: -1px;
+      left: -100%;
+      width: 60%;
+      height: 4px;
+      background: linear-gradient(90deg, transparent, white, transparent);
+      animation: flowPulse 2s linear infinite;
+      opacity: 0;
+    }
+
+    .flow-arrow-line.animating::after { opacity: 1; }
+
+    @keyframes flowPulse {
+      0% { left: -60%; }
+      100% { left: 150%; }
+    }
+
+    .flow-arrow-label {
+      font-size: 9px;
+      color: var(--text-muted);
+      font-family: 'JetBrains Mono', monospace;
+      white-space: nowrap;
+    }
+
+    /* ===== MAIN GRID ===== */
+    .main-grid {
+      display: grid;
+      grid-template-columns: 1fr 1.5fr;
+      gap: 20px;
+    }
+
+    /* ===== SEND ORDER FORM ===== */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 24px;
+    }
+
+    .form-group { margin-bottom: 18px; }
+
+    .form-label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 8px;
+    }
+
+    .form-input, .form-select {
+      width: 100%;
+      padding: 12px 16px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--text-primary);
+      font-family: 'Inter', sans-serif;
+      font-size: 14px;
+      transition: all 0.2s ease;
+      outline: none;
+    }
+
+    .form-input:focus, .form-select:focus {
+      border-color: var(--purple);
+      box-shadow: 0 0 0 3px rgba(139,92,246,0.15);
+    }
+
+    .form-select option { background: var(--bg-secondary); }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .btn-send {
+      width: 100%;
+      padding: 14px;
+      background: linear-gradient(135deg, var(--purple-dark), var(--purple));
+      color: white;
+      border: none;
+      border-radius: 10px;
+      font-family: 'Inter', sans-serif;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      letter-spacing: 0.02em;
+      margin-top: 4px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .btn-send::before {
+      content: '';
+      position: absolute;
+      top: 0; left: -100%;
+      width: 100%; height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+      transition: left 0.5s ease;
+    }
+
+    .btn-send:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(139,92,246,0.4); }
+    .btn-send:hover:not(:disabled)::before { left: 100%; }
+    .btn-send:active { transform: translateY(0); }
+    .btn-send:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .btn-random {
+      width: 100%;
+      padding: 11px;
+      background: transparent;
+      color: var(--text-secondary);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      font-family: 'Inter', sans-serif;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      margin-top: 8px;
+    }
+
+    .btn-random:hover { border-color: var(--purple); color: var(--purple-light); background: rgba(139,92,246,0.05); }
+
+    /* ===== ORDER FEED ===== */
+    .order-feed {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      max-height: 480px;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
+    }
+
+    .order-item {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+      transition: background 0.2s;
+      animation: slideIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    .order-item:last-child { border-bottom: none; }
+    .order-item:hover { background: rgba(255,255,255,0.02); }
+
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateX(-10px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+
+    .order-type-badge {
+      padding: 3px 9px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+
+    .badge-sent { background: rgba(139,92,246,0.15); color: var(--purple-light); border: 1px solid rgba(139,92,246,0.3); }
+    .badge-received { background: rgba(16,185,129,0.12); color: var(--green-light); border: 1px solid rgba(16,185,129,0.3); }
+
+    .order-info { flex: 1; min-width: 0; }
+
+    .order-id {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+
+    .order-product {
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-top: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .order-meta {
+      display: flex;
+      gap: 12px;
+      margin-top: 5px;
+    }
+
+    .order-meta-item {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .order-time {
+      font-size: 11px;
+      color: var(--text-muted);
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+
+    .empty-feed {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 60px 20px;
+      color: var(--text-muted);
+      text-align: center;
+      gap: 12px;
+    }
+
+    .empty-feed-icon { font-size: 48px; opacity: 0.3; }
+    .empty-feed-text { font-size: 14px; }
+
+    /* ===== TOAST ===== */
+    .toast-container {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .toast {
+      padding: 12px 18px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      animation: toastIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+      border: 1px solid;
+      backdrop-filter: blur(20px);
+      max-width: 320px;
+    }
+
+    .toast.success { background: rgba(16,185,129,0.15); border-color: rgba(16,185,129,0.3); color: var(--green-light); }
+    .toast.error { background: rgba(239,68,68,0.15); border-color: rgba(239,68,68,0.3); color: #fca5a5; }
+
+    @keyframes toastIn {
+      from { opacity: 0; transform: translateX(20px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+
+    /* ===== FEED HEADER ===== */
+    .feed-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    .btn-clear {
+      padding: 5px 12px;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text-muted);
+      font-size: 11px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-clear:hover { border-color: var(--red); color: var(--red); }
+
+    /* ===== CONNECTION OVERLAY ===== */
+    #connection-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(10,10,15,0.85);
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      backdrop-filter: blur(8px);
+      transition: opacity 0.5s ease;
+    }
+
+    #connection-overlay.hidden { opacity: 0; pointer-events: none; }
+
+    .overlay-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 48px;
+      text-align: center;
+      max-width: 400px;
+    }
+
+    .overlay-spinner {
+      width: 56px;
+      height: 56px;
+      border: 3px solid var(--border);
+      border-top-color: var(--purple);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 20px;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .overlay-title { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
+    .overlay-sub { font-size: 13px; color: var(--text-muted); }
+
+    /* Responsive */
+    @media (max-width: 1024px) {
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+      .main-grid { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 640px) {
+      .flow-diagram { flex-wrap: wrap; gap: 16px; }
+      .flow-arrow { display: none; }
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Background blobs -->
+  <div class="blob blob-1"></div>
+  <div class="blob blob-2"></div>
+  <div class="blob blob-3"></div>
+
+  <!-- Connection Overlay -->
+  <div id="connection-overlay">
+    <div class="overlay-card">
+      <div class="overlay-spinner"></div>
+      <div class="overlay-title">Menghubungkan ke RabbitMQ...</div>
+      <div class="overlay-sub">Memastikan koneksi ke message broker tersedia</div>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <div class="container">
+    <!-- Header -->
+    <header>
+      <div class="header-brand">
+        <div class="brand-icon">🐰</div>
+        <div class="brand-text">
+          <h1>RabbitMQ Dashboard</h1>
+          <p>Order Monitoring & Message Flow — Anggota 1</p>
+        </div>
+      </div>
+      <div class="header-status" id="status-badge">
+        <div class="status-dot" id="status-dot"></div>
+        <span id="status-text">Menghubungkan...</span>
+      </div>
+    </header>
+
+    <!-- Stats Grid -->
+    <div class="stats-grid">
+      <div class="stat-card sent">
+        <div class="stat-label">📤 Pesan Dikirim</div>
+        <div class="stat-value" id="stat-sent">0</div>
+      </div>
+      <div class="stat-card received">
+        <div class="stat-label">📥 Pesan Diterima</div>
+        <div class="stat-value" id="stat-received">0</div>
+      </div>
+      <div class="stat-card queue">
+        <div class="stat-label">📋 Total Aktivitas</div>
+        <div class="stat-value" id="stat-total">0</div>
+      </div>
+      <div class="stat-card failed">
+        <div class="stat-label">❌ Gagal</div>
+        <div class="stat-value" id="stat-failed">0</div>
+      </div>
+    </div>
+
+    <!-- Flow Visualization -->
+    <div class="flow-section">
+      <div class="section-title">⚡ Alur Pesan RabbitMQ</div>
+      <div class="flow-diagram">
+        <div class="flow-node producer">
+          <div class="flow-node-icon" id="node-producer">📤</div>
+          <div class="flow-node-label">Producer</div>
+          <div class="flow-node-sublabel">anggota3</div>
+        </div>
+
+        <div class="flow-arrow">
+          <div class="flow-arrow-line" id="arrow-1" style="--from: var(--purple); --to: var(--orange);">
+          </div>
+          <div class="flow-arrow-label">publish</div>
+        </div>
+
+        <div class="flow-node exchange">
+          <div class="flow-node-icon" id="node-exchange">🔀</div>
+          <div class="flow-node-label">Exchange</div>
+          <div class="flow-node-sublabel">order_exchange</div>
+        </div>
+
+        <div class="flow-arrow">
+          <div class="flow-arrow-line" id="arrow-2" style="--from: var(--orange); --to: var(--cyan);">
+          </div>
+          <div class="flow-arrow-label">route</div>
+        </div>
+
+        <div class="flow-node queue">
+          <div class="flow-node-icon" id="node-queue">📋</div>
+          <div class="flow-node-label">Queue</div>
+          <div class="flow-node-sublabel">order_created_queue</div>
+        </div>
+
+        <div class="flow-arrow">
+          <div class="flow-arrow-line" id="arrow-3" style="--from: var(--cyan); --to: var(--green);">
+          </div>
+          <div class="flow-arrow-label">deliver</div>
+        </div>
+
+        <div class="flow-node consumer">
+          <div class="flow-node-icon" id="node-consumer">📥</div>
+          <div class="flow-node-label">Consumer</div>
+          <div class="flow-node-sublabel">anggota4</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Grid -->
+    <div class="main-grid">
+      <!-- Send Order Form -->
+      <div class="card">
+        <div class="section-title">📤 Kirim Order Baru</div>
+
+        <div class="form-group">
+          <label class="form-label" for="input-product">Produk</label>
+          <select class="form-select" id="input-product">
+            <option value="">🎲 Acak (Random)</option>
+            <option value="Laptop Gaming">💻 Laptop Gaming</option>
+            <option value="Smartphone Android">📱 Smartphone Android</option>
+            <option value="Headset Bluetooth">🎧 Headset Bluetooth</option>
+            <option value="Mouse Wireless">🖱️ Mouse Wireless</option>
+            <option value="Keyboard Mechanical">⌨️ Keyboard Mechanical</option>
+            <option value="Monitor 4K">🖥️ Monitor 4K</option>
+          </select>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="input-quantity">Jumlah</label>
+            <input type="number" class="form-input" id="input-quantity" placeholder="Biarkan kosong = acak" min="1" max="100" />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="input-price">Harga (Rp)</label>
+            <input type="number" class="form-input" id="input-price" placeholder="Biarkan kosong = acak" min="0" />
+          </div>
+        </div>
+
+        <button class="btn-send" id="btn-send" onclick="sendOrder()">
+          🚀 &nbsp;Kirim Order ke RabbitMQ
+        </button>
+        <button class="btn-random" onclick="sendRandomBurst()">
+          ⚡ Kirim 5 Order Sekaligus
+        </button>
+      </div>
+
+      <!-- Order Feed -->
+      <div class="card">
+        <div class="feed-header">
+          <div class="section-title" style="margin-bottom:0">📡 Live Order Feed</div>
+          <button class="btn-clear" onclick="clearFeed()">Hapus Log</button>
+        </div>
+
+        <div class="order-feed" id="order-feed">
+          <div class="empty-feed" id="empty-feed">
+            <div class="empty-feed-icon">📭</div>
+            <div class="empty-feed-text">Belum ada aktivitas.<br/>Kirim order pertamamu!</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let ws;
+    let isConnected = false;
+    let feedItems = [];
+    let reconnectAttempts = 0;
+
+    function connectWS() {
+      const wsUrl = `ws://${window.location.host}`;
+      ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => { reconnectAttempts = 0; };
+
+      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        handleMessage(data);
+      };
+
+      ws.onclose = () => {
+        setConnectionStatus(false);
+        reconnectAttempts++;
+        setTimeout(connectWS, Math.min(3000 * reconnectAttempts, 15000));
+      };
+
+      ws.onerror = () => { ws.close(); };
+    }
+
+    function handleMessage(data) {
+      if (data.type === 'CONNECTION_STATUS') {
+        setConnectionStatus(data.connected);
+        updateStats(data.stats);
+      } else if (data.type === 'ORDER_SENT') {
+        updateStats(data.stats);
+        addFeedItem('sent', data.order);
+        animateFlowNode('node-producer');
+        animateArrow('arrow-1');
+        setTimeout(() => animateFlowNode('node-exchange'), 300);
+        setTimeout(() => animateArrow('arrow-2'), 500);
+        setTimeout(() => animateFlowNode('node-queue'), 700);
+      } else if (data.type === 'ORDER_RECEIVED') {
+        updateStats(data.stats);
+        addFeedItem('received', data.order);
+        animateArrow('arrow-3');
+        setTimeout(() => animateFlowNode('node-consumer'), 200);
+      }
+    }
+
+    function setConnectionStatus(connected) {
+      isConnected = connected;
+      const dot = document.getElementById('status-dot');
+      const text = document.getElementById('status-text');
+      const overlay = document.getElementById('connection-overlay');
+      const btn = document.getElementById('btn-send');
+
+      if (connected) {
+        dot.classList.add('connected');
+        text.textContent = 'Terhubung';
+        overlay.classList.add('hidden');
+        btn.disabled = false;
+        showToast('✅ Berhasil terhubung ke RabbitMQ!', 'success');
+      } else {
+        dot.classList.remove('connected');
+        text.textContent = 'Terputus';
+        overlay.classList.remove('hidden');
+        btn.disabled = true;
+      }
+    }
+
+    function updateStats(stats) {
+      if (!stats) return;
+      document.getElementById('stat-sent').textContent = stats.sent || 0;
+      document.getElementById('stat-received').textContent = stats.received || 0;
+      document.getElementById('stat-total').textContent = (stats.sent || 0) + (stats.received || 0);
+      document.getElementById('stat-failed').textContent = stats.failed || 0;
+    }
+
+    function addFeedItem(type, order) {
+      const emptyFeed = document.getElementById('empty-feed');
+      if (emptyFeed) emptyFeed.remove();
+
+      const feed = document.getElementById('order-feed');
+      const time = new Date(order.timestamp).toLocaleTimeString('id-ID');
+      const price = parseInt(order.price || 0).toLocaleString('id-ID');
+
+      const item = document.createElement('div');
+      item.className = 'order-item';
+      item.innerHTML = `
+        <span class="order-type-badge ${type === 'sent' ? 'badge-sent' : 'badge-received'}">
+          ${type === 'sent' ? '↑ SENT' : '↓ RECV'}
+        </span>
+        <div class="order-info">
+          <div class="order-id">${order.orderId}</div>
+          <div class="order-product">${order.product}</div>
+          <div class="order-meta">
+            <span class="order-meta-item">Qty: ${order.quantity}</span>
+            <span class="order-meta-item">Rp ${price}</span>
+          </div>
+        </div>
+        <div class="order-time">${time}</div>
+      `;
+
+      feed.insertBefore(item, feed.firstChild);
+      feedItems.push(item);
+
+      // Batasi 50 item
+      if (feedItems.length > 50) {
+        const oldest = feedItems.shift();
+        oldest.remove();
+      }
+    }
+
+    function animateFlowNode(nodeId) {
+      const node = document.getElementById(nodeId);
+      if (!node) return;
+      node.classList.add('active');
+      setTimeout(() => node.classList.remove('active'), 1000);
+    }
+
+    function animateArrow(arrowId) {
+      const arrow = document.getElementById(arrowId);
+      if (!arrow) return;
+      arrow.classList.add('animating');
+      setTimeout(() => arrow.classList.remove('animating'), 1500);
+    }
+
+    async function sendOrder() {
+      if (!isConnected) return;
+
+      const product = document.getElementById('input-product').value;
+      const quantity = document.getElementById('input-quantity').value;
+      const price = document.getElementById('input-price').value;
+
+      const btn = document.getElementById('btn-send');
+      btn.disabled = true;
+      btn.textContent = '⏳  Mengirim...';
+
+      try {
+        const res = await fetch('/api/send-order', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ product: product || undefined, quantity: quantity || undefined, price: price || undefined })
+        });
+
+        const data = await res.json();
+        if (data.success) {
+          showToast(`✅ Order ${data.order.orderId} berhasil dikirim!`, 'success');
+        } else {
+          showToast(`❌ Gagal: ${data.error}`, 'error');
+        }
+      } catch (err) {
+        showToast('❌ Koneksi ke server gagal', 'error');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '🚀  Kirim Order ke RabbitMQ';
+      }
+    }
+
+    async function sendRandomBurst() {
+      if (!isConnected) return;
+      showToast('⚡ Mengirim 5 order...', 'success');
+      for (let i = 0; i < 5; i++) {
+        await new Promise(r => setTimeout(r, 300));
+        await fetch('/api/send-order', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      }
+    }
+
+    function clearFeed() {
+      const feed = document.getElementById('order-feed');
+      feed.innerHTML = '<div class="empty-feed" id="empty-feed"><div class="empty-feed-icon">📭</div><div class="empty-feed-text">Belum ada aktivitas.<br/>Kirim order pertamamu!</div></div>';
+      feedItems = [];
+    }
+
+    function showToast(message, type = 'success') {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      toast.className = `toast ${type}`;
+      toast.textContent = message;
+      container.appendChild(toast);
+      setTimeout(() => toast.remove(), 4000);
+    }
+
+    // Start
+    connectWS();
+  </script>
+</body>
+</html>
