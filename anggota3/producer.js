@@ -11,10 +11,8 @@ async function sendOrderMessage() {
     const exchangeName = 'order_exchange';
     const routingKey = 'order.created';
 
-    // PASTIKAN exchange dan queue sudah ada agar tidak error / hilang
-    await channel.assertExchange(exchangeName, 'topic', { durable: true });
-    await channel.assertQueue('order_created_queue', { durable: true });
-    await channel.bindQueue('order_created_queue', exchangeName, routingKey);
+    // HANYA MENGIRIM PESAN (Bergantung pada Anggota 2 untuk membuat Exchange)
+    // Script ini akan error (404 Not Found) jika Anggota 2 belum menyalakan koneksinya.
 
     // Data pesanan dummy yang akan dikirim (sekarang bervariasi)
     const products = ['Laptop Gaming', 'Smartphone Android', 'Headset Bluetooth', 'Mouse Wireless'];
